@@ -11,12 +11,12 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Index is HTTP handler for /, print a welcome message
+// Index is HTTP handler for /, print starting point of /todos/
 func Index(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+//	w.WriteHeader(http.StatusOK)
 
-	// TODO: need to return JSON here instead
-
-	fmt.Fprint(w, "Welcome!\n")
+	fmt.Fprint(w, `{"todos":"/todos/"}\n`)
 }
 
 // TodoIndex is HTTP handler for /todos, print list of existing todos
@@ -33,6 +33,7 @@ func TodoShow(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	var todoId int
 	var err error
+	// BUG(sweitzy): will panic if var is not numeric (e.g. "/todos/foo")
 	if todoId, err = strconv.Atoi(vars["todoId"]); err != nil {
 		panic(err)
 	}
@@ -52,7 +53,6 @@ func TodoShow(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(jsonErr{Code: http.StatusNotFound, Text: "Not Found"}); err != nil {
 		panic(err)
 	}
-
 }
 
 // TodoCreate is HTTP handler for POST /todos/, create a new todo
@@ -61,6 +61,7 @@ func TodoShow(w http.ResponseWriter, r *http.Request) {
 func TodoCreate(w http.ResponseWriter, r *http.Request) {
 	var todo Todo
 
+	// Protect against too large of requests.
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1048576))
 	if err != nil {
 		panic(err)
@@ -68,7 +69,7 @@ func TodoCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.Body.Close(); err != nil {
 		panic(err)
 	}
-	// BUG(sweitzy): can Unmarshall fail here?
+
 	if err := json.Unmarshal(body, &todo); err != nil {
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(422) // unprocessable entity
@@ -82,5 +83,27 @@ func TodoCreate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(t); err != nil {
 		panic(err)
+	}
+}
+
+// TodoCreate is HTTP handler for DELETE /todos/, deletes an existing todo
+//   Test with this curl command:
+//      curl -XDELETE http://localhost:8080/todos/1
+func TodoDelete(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	var todoId int
+	var err error
+
+	if todoId, err = strconv.Atoi(vars["todoId"]); err != nil {
+		panic(err)
+	}
+	if err  = RepoDestroyTodo(todoId); err != nil {
+	
+		// If we didn't find it, 404
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusNotFound)
+		if err := json.NewEncoder(w).Encode(jsonErr{Code: http.StatusNotFound, Text: "Not Found"}); err != nil {
+			panic(err)
+		}
 	}
 }
